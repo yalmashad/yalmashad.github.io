@@ -1,0 +1,1556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>F5 AI Guardrails — GPU Resource Sizing & Capacity Calculator</title>
+<meta name="description" content="Calculate required GPU resources (NVIDIA H100, A100, L40, A10, L4) for F5 AI Guardrail workloads based on message size, throughput (RPS), active scanners, latency SLAs, and deployment modes." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ---------- CSS Design System Tokens ---------- */
+:root {
+  --plane: #0b0f19;
+  --surface: #111827;
+  --surface-2: #1f293d;
+  --surface-card: #162032;
+  --ink: #ffffff;
+  --ink-2: #94a3b8;
+  --muted: #64748b;
+  --hair: #1e293b;
+  --hair-strong: #334155;
+  
+  --f5-red: #e0001b;
+  --f5-coral: #ff2a4b;
+  --f5-red-glow: rgba(224, 0, 27, 0.25);
+  
+  --series-1: #38bdf8; /* sky blue */
+  --series-2: #34d399; /* emerald green */
+  --series-3: #fbbf24; /* amber */
+  --series-4: #f43f5e; /* rose red */
+  --series-5: #a855f7; /* purple */
+  
+  --accent: #e0001b;
+  --accent-ink: #ff4d63;
+  --good: #10b981;
+  --warn: #f59e0b;
+  
+  --shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(224, 0, 27, 0.2);
+  --radius: 16px;
+  --radius-sm: 10px;
+}
+
+[data-theme="light"] {
+  --plane: #f8fafc;
+  --surface: #ffffff;
+  --surface-2: #f1f5f9;
+  --surface-card: #ffffff;
+  --ink: #0f172a;
+  --ink-2: #475569;
+  --muted: #64748b;
+  --hair: #e2e8f0;
+  --hair-strong: #cbd5e1;
+  
+  --f5-red: #e0001b;
+  --f5-coral: #d90018;
+  --f5-red-glow: rgba(224, 0, 27, 0.12);
+  
+  --series-1: #0284c7;
+  --series-2: #059669;
+  --series-3: #d97706;
+  --series-4: #e11d48;
+  --series-5: #9333ea;
+  
+  --accent: #e0001b;
+  --accent-ink: #c80017;
+  --good: #16a34a;
+  --warn: #d97706;
+  
+  --shadow: 0 4px 16px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 12px 36px rgba(15, 23, 42, 0.1);
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--plane);
+  color: var(--ink);
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  transition: background .3s, color .3s;
+}
+
+h1, h2, h3, h4, .display {
+  font-family: "Archivo", system-ui, sans-serif;
+  letter-spacing: -.02em;
+  line-height: 1.15;
+}
+.mono {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+a { color: var(--accent-ink); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px; }
+
+/* ---------- Sticky Navigation Bar ---------- */
+.top {
+  position: sticky; top: 0; z-index: 50;
+  background: color-mix(in srgb, var(--plane) 90%, transparent);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--hair);
+}
+.top .row { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+.brand {
+  display: flex; align-items: center; gap: 12px;
+  font-family: "Archivo"; font-weight: 800; font-size: 18px; letter-spacing: -.01em;
+}
+.brand-logo {
+  background: var(--f5-red); color: #fff;
+  font-size: 11px; font-weight: 900; padding: 3px 7px; border-radius: 6px;
+  letter-spacing: .05em; display: inline-block;
+}
+.brand small {
+  font-family: "IBM Plex Mono"; font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 4px;
+}
+.tnav { display: flex; gap: 20px; align-items: center; }
+.tnav a { color: var(--ink-2); font-size: 14px; font-weight: 500; transition: color .2s; }
+.tnav a:hover { color: var(--ink); text-decoration: none; }
+.toggle {
+  border: 1px solid var(--hair-strong); background: var(--surface); color: var(--ink-2);
+  width: 38px; height: 34px; border-radius: 10px; cursor: pointer; font-size: 15px;
+  display: grid; place-items: center; transition: all .2s;
+}
+.toggle:hover { color: var(--ink); border-color: var(--f5-red); }
+
+@media(max-width: 768px) { .tnav a { display: none; } }
+
+/* ---------- Hero Section ---------- */
+.hero { padding: 48px 0 24px; position: relative; }
+.eyebrow {
+  font-family: "IBM Plex Mono"; font-size: 12.5px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--accent-ink); font-weight: 600;
+  display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+}
+.eyebrow::before { content: ""; width: 20px; height: 2px; background: var(--f5-red); display: inline-block; }
+.hero h1 { font-size: clamp(32px, 5vw, 56px); font-weight: 800; margin: 0 0 16px; color: var(--ink); }
+.hero .sub { font-size: clamp(16px, 1.8vw, 19px); color: var(--ink-2); max-width: 820px; margin: 0 0 28px; line-height: 1.5; }
+
+/* Preset workload toolbar */
+.presets { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 24px; align-items: center; }
+.presets-label { font-family: "IBM Plex Mono"; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-right: 4px; }
+.preset-btn {
+  background: var(--surface-2); border: 1px solid var(--hair-strong); color: var(--ink-2);
+  padding: 8px 14px; border-radius: 20px; font-size: 13.5px; font-weight: 500; cursor: pointer;
+  display: flex; align-items: center; gap: 7px; transition: all .2s;
+}
+.preset-btn:hover { background: var(--surface-card); color: var(--ink); border-color: var(--f5-red); }
+.preset-btn[data-active="true"] {
+  background: var(--f5-red); color: #fff; border-color: var(--f5-red);
+  box-shadow: 0 2px 12px var(--f5-red-glow);
+}
+
+/* ---------- Main Calculator Layout ---------- */
+.calc-container {
+  display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 24px;
+  margin-top: 10px; margin-bottom: 48px;
+}
+@media(max-width: 1024px) { .calc-container { grid-template-columns: 1fr; } }
+
+.card-box {
+  background: var(--surface); border: 1px solid var(--hair); border-radius: var(--radius);
+  padding: 28px; box-shadow: var(--shadow); transition: border-color .3s;
+}
+.card-box:hover { border-color: var(--hair-strong); }
+
+.section-head {
+  font-family: "Archivo"; font-size: 18px; font-weight: 700; margin: 0 0 20px;
+  display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--hair); padding-bottom: 12px;
+}
+.section-head .badge {
+  font-family: "IBM Plex Mono"; font-size: 11px; text-transform: uppercase;
+  background: var(--surface-2); color: var(--accent-ink); padding: 3px 8px; border-radius: 6px;
+}
+
+/* Control Controls */
+.ctl-group { margin-bottom: 24px; }
+.ctl-group:last-child { margin-bottom: 0; }
+.ctl-label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+.ctl-label b { font-family: "Archivo"; font-weight: 600; font-size: 15px; color: var(--ink); }
+.ctl-label .val { font-family: "IBM Plex Mono"; font-size: 15px; color: var(--accent-ink); font-weight: 600; }
+.hint-text { font-size: 13px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+
+/* Custom Sliders */
+input[type=range] {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 6px; border-radius: 6px;
+  background: var(--hair-strong); outline: none; margin: 8px 0;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--f5-red); cursor: pointer; border: 3px solid var(--surface);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4); transition: transform .15s;
+}
+input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+input[type=range]::-moz-range-thumb {
+  width: 22px; height: 22px; border-radius: 50%; background: var(--f5-red);
+  cursor: pointer; border: 3px solid var(--surface);
+}
+
+/* SLA Quick Presets */
+.sla-presets { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.sla-btn {
+  background: var(--surface-2); border: 1px solid var(--hair); color: var(--ink-2);
+  padding: 5px 10px; border-radius: 6px; font-family: "IBM Plex Mono"; font-size: 12px;
+  cursor: pointer; transition: all .2s;
+}
+.sla-btn:hover { border-color: var(--hair-strong); color: var(--ink); }
+.sla-btn[data-active="true"] { background: var(--surface-card); color: var(--f5-coral); border-color: var(--f5-red); font-weight: 600; }
+
+/* Segmented Buttons */
+.seg-group {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;
+  background: var(--surface-2); padding: 4px; border-radius: 12px; border: 1px solid var(--hair);
+}
+.seg-btn {
+  border: none; background: transparent; padding: 10px; border-radius: 8px; cursor: pointer;
+  font-family: "IBM Plex Mono"; font-size: 13.5px; color: var(--ink-2); font-weight: 500;
+  transition: all .2s; text-align: center;
+}
+.seg-btn[aria-pressed=true] {
+  background: var(--surface-card); color: var(--ink); font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2); border: 1px solid var(--hair-strong);
+}
+
+/* Checkboxes & Chips */
+.chips-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-top: 10px; }
+.scanner-chip {
+  background: var(--surface-2); border: 1px solid var(--hair); border-radius: 10px; padding: 10px 12px;
+  cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: all .2s;
+  user-select: none;
+}
+.scanner-chip:hover { border-color: var(--hair-strong); background: var(--surface-card); }
+.scanner-chip[data-active="true"] {
+  border-color: var(--f5-red); background: color-mix(in srgb, var(--f5-red) 12%, var(--surface-card));
+}
+.chip-info { display: flex; flex-direction: column; }
+.chip-title { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.chip-cost { font-family: "IBM Plex Mono"; font-size: 11px; color: var(--muted); }
+.chip-check {
+  width: 18px; height: 18px; border-radius: 4px; border: 1.5px solid var(--hair-strong);
+  display: grid; place-items: center; font-size: 12px; color: transparent; transition: all .2s;
+}
+.scanner-chip[data-active="true"] .chip-check {
+  background: var(--f5-red); border-color: var(--f5-red); color: #fff;
+}
+
+/* Results Hero Box */
+.hero-result {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--f5-red) 15%, var(--surface-card)), var(--surface-card));
+  border: 1px solid color-mix(in srgb, var(--f5-red) 40%, var(--hair));
+  border-radius: var(--radius); padding: 24px; position: relative; overflow: hidden;
+  box-shadow: var(--shadow-lg); margin-bottom: 20px;
+}
+.hero-result::before {
+  content: ""; position: absolute; top: -50%; right: -50%; width: 200px; height: 200px;
+  background: radial-gradient(circle, var(--f5-red-glow) 0%, transparent 70%); pointer-events: none;
+}
+.hero-title-row { display: flex; justify-content: space-between; align-items: center; }
+.hero-title { font-family: "IBM Plex Mono"; font-size: 12px; text-transform: uppercase; color: var(--f5-coral); letter-spacing: .1em; font-weight: 600; }
+.sla-badge {
+  font-family: "IBM Plex Mono"; font-size: 11.5px; padding: 4px 10px; border-radius: 20px; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.sla-badge[data-status="pass"] { background: rgba(16, 185, 129, 0.18); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+.sla-badge[data-status="fail"] { background: rgba(239, 68, 68, 0.18); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); }
+
+.hero-main-stat { display: flex; align-items: baseline; gap: 12px; margin: 12px 0 8px; }
+.hero-gpu-count { font-family: "Archivo"; font-weight: 800; font-size: clamp(40px, 4.5vw, 56px); color: var(--ink); line-height: 1; }
+.hero-gpu-model { font-family: "Archivo"; font-size: 22px; font-weight: 700; color: var(--accent-ink); }
+.hero-sub { font-size: 14.5px; color: var(--ink-2); line-height: 1.5; }
+
+.stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; }
+.mini-stat { background: var(--surface-2); border: 1px solid var(--hair); border-radius: 12px; padding: 14px 16px; }
+.mini-stat .lbl { font-family: "IBM Plex Mono"; font-size: 11.5px; color: var(--muted); text-transform: uppercase; }
+.mini-stat .val { font-family: "IBM Plex Mono"; font-size: 20px; font-weight: 700; color: var(--ink); margin-top: 4px; }
+.mini-stat .unit { font-size: 12px; color: var(--ink-2); font-weight: 400; }
+
+/* Latency Decomposition Box */
+.lat-card {
+  background: var(--surface-2); border: 1px solid var(--hair); border-radius: 12px; padding: 16px; margin-bottom: 20px;
+}
+.lat-head { font-family: "Archivo"; font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 10px; display: flex; justify-content: space-between; }
+.lat-bar { height: 10px; background: var(--hair-strong); border-radius: 6px; overflow: hidden; display: flex; margin-bottom: 12px; }
+.lat-seg-prompt { background: var(--series-1); height: 100%; }
+.lat-seg-llm { background: var(--series-3); height: 100%; }
+.lat-seg-resp { background: var(--series-2); height: 100%; }
+
+.lat-legend { display: flex; gap: 16px; font-size: 12px; flex-wrap: wrap; }
+.lat-item { display: flex; align-items: center; gap: 6px; }
+.lat-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+/* Latency Scaling Callout Banner */
+.sla-impact-box {
+  background: color-mix(in srgb, var(--series-1) 10%, var(--surface-2));
+  border: 1px solid color-mix(in srgb, var(--series-1) 30%, var(--hair));
+  border-radius: 12px; padding: 14px 16px; margin-bottom: 20px; font-size: 13.5px; color: var(--ink-2);
+}
+.sla-impact-box b { color: var(--ink); }
+
+/* Hardware Specs Table */
+.spec-box { background: var(--surface-2); border: 1px solid var(--hair); border-radius: 12px; padding: 16px; margin-top: 16px; }
+.spec-title { font-family: "Archivo"; font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.spec-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; }
+.spec-item { background: var(--surface); padding: 8px; border-radius: 8px; border: 1px solid var(--hair); }
+.spec-item .k { font-size: 11px; color: var(--muted); text-transform: uppercase; font-family: "IBM Plex Mono"; }
+.spec-item .v { font-size: 13.5px; font-weight: 600; color: var(--accent-ink); margin-top: 2px; }
+
+/* Canvas Flow Box */
+.flow-card { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--radius); padding: 20px; margin-top: 24px; }
+.flow-cap { font-family: "IBM Plex Mono"; font-size: 12px; color: var(--muted); margin-bottom: 8px; display: flex; justify-content: space-between; }
+canvas#flowCanvas { display: block; width: 100%; height: 110px; background: var(--surface-2); border-radius: 10px; border: 1px solid var(--hair); }
+
+/* ---------- Section Layouts ---------- */
+section { padding: 40px 0; border-top: 1px solid var(--hair); }
+.stag {
+  font-family: "IBM Plex Mono"; font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--f5-coral); display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 8px;
+}
+.stag::before { content: ""; width: 18px; height: 2px; background: var(--f5-red); }
+.h2 { font-size: clamp(24px, 3vw, 36px); font-weight: 700; margin: 0 0 12px; color: var(--ink); }
+.lede { color: var(--ink-2); max-width: 720px; margin: 0 0 28px; font-size: 16.5px; line-height: 1.6; }
+
+/* GPU Matrix Comparison Table */
+.gpu-table-wrap { overflow-x: auto; margin-top: 20px; border: 1px solid var(--hair); border-radius: 14px; background: var(--surface); }
+table.gpu-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; }
+table.gpu-table th, table.gpu-table td { padding: 14px 18px; border-bottom: 1px solid var(--hair); }
+table.gpu-table thead th {
+  background: var(--surface-2); font-family: "IBM Plex Mono"; font-size: 12px;
+  color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 600;
+}
+table.gpu-table tbody tr { transition: background .15s; }
+table.gpu-table tbody tr:hover { background: var(--surface-2); }
+table.gpu-table tbody tr[data-rec="true"] { background: color-mix(in srgb, var(--f5-red) 8%, var(--surface)); }
+.badge-rec {
+  background: var(--f5-red); color: #fff; font-family: "IBM Plex Mono"; font-size: 10.5px;
+  padding: 2px 7px; border-radius: 4px; font-weight: 600; text-transform: uppercase; margin-left: 8px;
+}
+.status-pill { font-family: "IBM Plex Mono"; font-size: 11px; padding: 3px 8px; border-radius: 6px; font-weight: 600; }
+.status-pill[data-pass="true"] { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+.status-pill[data-pass="false"] { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+
+/* Charts Grid */
+.charts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin-top: 24px; }
+@media(max-width: 900px) { .charts-grid { grid-template-columns: 1fr; } }
+
+.chart-card { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); position: relative; }
+.chart-card h3 { font-size: 18px; font-weight: 700; margin: 0 0 4px; color: var(--ink); }
+.chart-card p { font-size: 13.5px; color: var(--muted); margin: 0 0 16px; }
+
+/* Chart Interactive Value Display Box */
+.chart-val-box {
+  background: var(--surface-2); border: 1px solid var(--hair-strong); border-radius: 10px;
+  padding: 10px 14px; margin-top: 14px; font-family: "IBM Plex Mono"; font-size: 13px;
+  color: var(--ink); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+}
+.chart-val-box b { color: var(--f5-coral); }
+
+.svgchart { width: 100%; height: auto; display: block; overflow: visible; user-select: none; }
+.svgchart text { font-family: "IBM Plex Mono"; fill: var(--muted); font-size: 11.5px; }
+.svgchart .axttl { fill: var(--ink-2); font-family: "Archivo"; font-size: 12.5px; font-weight: 700; }
+.svgchart .dlab { fill: var(--ink); font-weight: 600; font-size: 12px; }
+
+/* Interactive SVG Chart Items */
+.chart-dot-group { cursor: pointer; transition: transform .15s; }
+.chart-dot-group:hover circle.dot-core { r: 6; fill: var(--f5-red); stroke: #fff; }
+.chart-dot-group[data-selected="true"] circle.dot-core { r: 7; fill: var(--f5-red); stroke: #fff; stroke-width: 2.5; }
+.chart-bar-group { cursor: pointer; transition: opacity .15s; }
+.chart-bar-group:hover { opacity: 0.85; }
+
+/* Tooltip */
+.tip {
+  position: fixed; pointer-events: none; z-index: 100; background: #0f172a; color: #fff;
+  font-family: "IBM Plex Mono"; font-size: 12px; padding: 8px 12px; border-radius: 8px; opacity: 0;
+  transition: opacity .15s; box-shadow: 0 8px 24px rgba(0,0,0,0.4); border: 1px solid #334155;
+  white-space: nowrap; transform: translate(-50%, -120%);
+}
+[data-theme="light"] .tip { background: #0f172a; color: #fff; }
+
+/* Export Modal */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.7); backdrop-filter: blur(6px);
+  display: grid; place-items: center; opacity: 0; pointer-events: none; transition: opacity .25s;
+}
+.modal-backdrop[data-open="true"] { opacity: 1; pointer-events: auto; }
+.modal-box {
+  background: var(--surface); border: 1px solid var(--hair-strong); border-radius: 20px;
+  max-width: 720px; width: 90%; padding: 32px; box-shadow: var(--shadow-lg); max-height: 85vh;
+  display: flex; flex-direction: column;
+}
+.modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.modal-head h3 { font-size: 20px; font-weight: 700; margin: 0; }
+.modal-close { background: none; border: none; color: var(--muted); font-size: 22px; cursor: pointer; }
+.modal-close:hover { color: var(--ink); }
+.modal-body { overflow-y: auto; background: var(--surface-2); border: 1px solid var(--hair); border-radius: 10px; padding: 16px; margin-bottom: 20px; }
+.modal-body pre { margin: 0; font-family: "IBM Plex Mono"; font-size: 13px; color: var(--ink); white-space: pre-wrap; word-break: break-word; }
+.btn-primary {
+  background: var(--f5-red); color: #fff; border: none; padding: 12px 20px; border-radius: 10px;
+  font-family: "Archivo"; font-weight: 600; font-size: 14.5px; cursor: pointer; transition: background .2s;
+  display: inline-flex; align-items: center; gap: 8px; justify-content: center;
+}
+.btn-primary:hover { background: var(--f5-coral); }
+
+footer { border-top: 1px solid var(--hair); padding: 40px 0 60px; color: var(--muted); font-size: 13.5px; }
+</style>
+</head>
+<body data-theme="dark">
+
+<!-- Sticky Top Bar -->
+<div class="top">
+  <div class="wrap row">
+    <div class="brand">
+      <span class="brand-logo">F5</span>
+      AI Guardrails <small>/ GPU Sizing Calculator</small>
+    </div>
+    <nav class="tnav">
+      <a href="#calc">Calculator</a>
+      <a href="#matrix">GPU Comparison</a>
+      <a href="#charts">Scaling Charts</a>
+      <button class="toggle" id="themeBtn" title="Toggle Light / Dark Mode" aria-label="Toggle dark mode">◐</button>
+    </nav>
+  </div>
+</div>
+
+<main class="wrap">
+
+  <!-- Hero Header -->
+  <header class="hero">
+    <div class="eyebrow">Capacity Planning & Hardware Sizing Tool</div>
+    <h1>F5 AI Guardrail Resource Calculator</h1>
+    <p class="sub">
+      Determine the exact GPU infrastructure required (NVIDIA H100, A100, L40, A10, L4) to secure your GenAI workloads. 
+      Select your target latency SLA budget. <b>Strict low latency SLAs cap GPU queue utilization to prevent delays, requiring more GPUs</b>, while <b>relaxed SLAs allow higher GPU queue depth and fewer GPUs</b>.
+    </p>
+
+    <!-- Preset Selection Bar -->
+    <div class="presets">
+      <span class="presets-label">Workload Presets:</span>
+      <button class="preset-btn" data-preset="chatbot" data-active="true">💬 Chatbot (500ms SLA)</button>
+      <button class="preset-btn" data-preset="support">🎧 Support Bot (1.0s SLA)</button>
+      <button class="preset-btn" data-preset="rag">📄 Document RAG (2.0s SLA · Relaxed)</button>
+      <button class="preset-btn" data-preset="gateway">🚀 Ultra-Fast Gateway (100ms SLA · Strict)</button>
+    </div>
+  </header>
+
+  <!-- CALCULATOR SECTION -->
+  <div class="calc-container" id="calc">
+
+    <!-- INPUT CONTROLS PANEL -->
+    <div class="card-box">
+      <div class="section-head">
+        <span>1. Workload & SLA Parameters</span>
+        <span class="badge">Inputs</span>
+      </div>
+
+      <!-- Deployment Lifecycle Mode -->
+      <div class="ctl-group">
+        <div class="ctl-label">
+          <b>Deployment Lifecycle</b>
+        </div>
+        <div class="seg-group" id="modeSeg">
+          <button class="seg-btn" data-mode="out_of_band" aria-pressed="true">Out-of-Band (/scans)</button>
+          <button class="seg-btn" data-mode="inline" aria-pressed="false">Inline (/prompts)</button>
+        </div>
+        <div class="hint-text" id="modeHint">
+          <b>Out-of-Band:</b> Scans input prompt only before LLM. Eliminates LLM model waiting latency.
+        </div>
+      </div>
+
+      <!-- Target Latency SLA Budget -->
+      <div class="ctl-group">
+        <div class="ctl-label">
+          <b>Target Maximum Latency SLA</b>
+          <span class="val" id="slaVal">500 ms</span>
+        </div>
+        <input type="range" id="slaSlide" min="50" max="5000" step="50" value="500">
+        <div class="sla-presets">
+          <span style="font-size: 11.5px; color: var(--muted); align-self: center;">Quick SLA:</span>
+          <button class="sla-btn" data-sla="100">⚡ 100 ms (Strict)</button>
+          <button class="sla-btn" data-sla="250">🚀 250 ms</button>
+          <button class="sla-btn" data-sla="500" data-active="true">⏱️ 500 ms</button>
+          <button class="sla-btn" data-sla="1000">⚖️ 1.0 sec</button>
+          <button class="sla-btn" data-sla="4000">🐢 4.0 sec (Relaxed)</button>
+        </div>
+        <div class="hint-text">
+          <b>Queueing Delay Impact:</b> Lower SLAs limit GPU utilization to prevent queuing wait time, scaling up the required GPU instance count.
+        </div>
+      </div>
+
+      <!-- Target LLM Latency Overhead (Inline Mode Only) -->
+      <div class="ctl-group" id="llmLatGroup" style="display:none;">
+        <div class="ctl-label">
+          <b>Target LLM Processing Time</b>
+          <span class="val" id="llmLatVal">800 ms</span>
+        </div>
+        <input type="range" id="llmLatSlide" min="100" max="5000" step="100" value="800">
+        <div class="hint-text">Estimated time spent inside the LLM model (TTFT + token generation).</div>
+      </div>
+
+      <!-- Target Throughput RPS -->
+      <div class="ctl-group">
+        <div class="ctl-label">
+          <b>Target Throughput</b>
+          <span class="val" id="rpsVal">50 Req / sec</span>
+        </div>
+        <input type="range" id="rpsSlide" min="1" max="2000" step="1" value="50">
+        <div class="hint-text">
+          Peak volume: <span class="mono" id="dailyVolume">4.32 Million</span> requests per day.
+        </div>
+      </div>
+
+      <!-- Spike Safety Buffer -->
+      <div class="ctl-group">
+        <div class="ctl-label">
+          <b>Traffic Headroom Buffer</b>
+          <span class="val" id="bufVal">25%</span>
+        </div>
+        <input type="range" id="bufSlide" min="0" max="50" step="5" value="25">
+        <div class="hint-text">Extra GPU capacity headroom reserved for traffic bursts and queuing delays.</div>
+      </div>
+
+      <!-- Prompt Size -->
+      <div class="ctl-group">
+        <div class="ctl-label">
+          <b>Average Input Prompt Size</b>
+          <span class="val" id="promptVal">256 tokens</span>
+        </div>
+        <input type="range" id="promptSlide" min="32" max="8192" step="32" value="256">
+        <div class="hint-text" id="promptHint">256 tokens ≈ 192 words (a short paragraph or query).</div>
+      </div>
+
+      <!-- Output Response Size (Inline Mode Only) -->
+      <div class="ctl-group" id="responseGroup" style="display:none;">
+        <div class="ctl-label">
+          <b>Average LLM Response Size</b>
+          <span class="val" id="respVal">256 tokens</span>
+        </div>
+        <input type="range" id="respSlide" min="0" max="4096" step="32" value="256">
+        <div class="hint-text">Model generation size scanned on return in Inline mode.</div>
+      </div>
+
+      <!-- Guardrail Scanners Selection -->
+      <div class="ctl-group">
+        <div class="ctl-label">
+          <b>Active Guardrail Scanners</b>
+          <span class="val" id="scannerCountVal">3 Scanners</span>
+        </div>
+        <div class="chips-grid" id="scannersGrid">
+          <div class="scanner-chip" data-id="pi" data-cost="165" data-active="true">
+            <div class="chip-info">
+              <span class="chip-title">Prompt Injection</span>
+              <span class="chip-cost">+165 tok overhead</span>
+            </div>
+            <div class="chip-check">✓</div>
+          </div>
+          <div class="scanner-chip" data-id="jb" data-cost="330" data-active="true">
+            <div class="chip-info">
+              <span class="chip-title">Jailbreak Guard</span>
+              <span class="chip-cost">+330 tok overhead</span>
+            </div>
+            <div class="chip-check">✓</div>
+          </div>
+          <div class="scanner-chip" data-id="sp" data-cost="590" data-active="true">
+            <div class="chip-info">
+              <span class="chip-title">System Prompt</span>
+              <span class="chip-cost">+590 tok overhead</span>
+            </div>
+            <div class="chip-check">✓</div>
+          </div>
+          <div class="scanner-chip" data-id="obf" data-cost="305" data-active="false">
+            <div class="chip-info">
+              <span class="chip-title">Obfuscation</span>
+              <span class="chip-cost">+305 tok overhead</span>
+            </div>
+            <div class="chip-check">✓</div>
+          </div>
+          <div class="scanner-chip" data-id="pii" data-cost="250" data-active="false">
+            <div class="chip-info">
+              <span class="chip-title">PII Detection</span>
+              <span class="chip-cost">+250 tok overhead</span>
+            </div>
+            <div class="chip-check">✓</div>
+          </div>
+          <div class="scanner-chip" data-id="tox" data-cost="210" data-active="false">
+            <div class="chip-info">
+              <span class="chip-title">Toxicity & Harm</span>
+              <span class="chip-cost">+210 tok overhead</span>
+            </div>
+            <div class="chip-check">✓</div>
+          </div>
+          <div class="scanner-chip" data-id="sec" data-cost="180" data-active="false">
+            <div class="chip-info">
+              <span class="chip-title">Secrets & Code</span>
+              <span class="chip-cost">+180 tok overhead</span>
+            </div>
+            <div class="chip-check">✓</div>
+          </div>
+          <div class="scanner-chip" data-id="comp" data-cost="220" data-active="false">
+            <div class="chip-info">
+              <span class="chip-title">Compliance</span>
+              <span class="chip-cost">+220 tok overhead</span>
+            </div>
+            <div class="chip-check">✓</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Custom Rules -->
+      <div class="ctl-group">
+        <div class="ctl-label">
+          <b>Custom GenAI Policy Rulebook</b>
+          <span class="val" id="customVal">0 Tokens (Disabled)</span>
+        </div>
+        <input type="range" id="customSlide" min="0" max="600" step="20" value="0">
+        <div class="hint-text">Instruction token size for custom user-defined guardrail rules.</div>
+      </div>
+
+      <!-- Selected GPU Profile -->
+      <div class="ctl-group">
+        <div class="ctl-label">
+          <b>Hardware GPU Profile</b>
+          <span class="val" id="gpuProfVal">Auto-Recommend</span>
+        </div>
+        <div class="seg-group" id="gpuSeg" style="grid-template-columns: repeat(3, 1fr);">
+          <button class="seg-btn" data-gpu="auto" aria-pressed="true">Auto Best</button>
+          <button class="seg-btn" data-gpu="h100" aria-pressed="false">H100</button>
+          <button class="seg-btn" data-gpu="a100" aria-pressed="false">A100</button>
+          <button class="seg-btn" data-gpu="l40" aria-pressed="false">L40</button>
+          <button class="seg-btn" data-gpu="a10" aria-pressed="false">A10</button>
+          <button class="seg-btn" data-gpu="l4" aria-pressed="false">L4</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- OUTPUT RESULTS PANEL -->
+    <div class="calc-outputs">
+      
+      <!-- Primary Recommendation Hero Box -->
+      <div class="hero-result">
+        <div class="hero-title-row">
+          <span class="hero-title">Recommended GPU Deployment</span>
+          <span class="sla-badge" id="resSlaBadge" data-status="pass">✓ Meets SLA</span>
+        </div>
+        <div class="hero-main-stat">
+          <span class="hero-gpu-count" id="resGpuCount">12 ×</span>
+          <span class="hero-gpu-model" id="resGpuModel">NVIDIA H100 (80GB)</span>
+        </div>
+        <div class="hero-sub" id="resSummaryText">
+          Sufficient to process <b>50 RPS</b> with 25% spike headroom and 130ms average scanning latency.
+        </div>
+      </div>
+
+      <!-- SLA Scaling Banner Callout -->
+      <div class="sla-impact-box" id="slaImpactText">
+        ⚡ <b>Queueing SLA Dynamics:</b> To guarantee latency stays under <b>500 ms SLA</b>, GPU utilization is capped at <b>74% max load per instance</b>, requiring <b>12 × NVIDIA H100 (80GB)</b>.
+      </div>
+
+      <!-- Latency Decomposition Breakdown -->
+      <div class="lat-card">
+        <div class="lat-head">
+          <span>Latency Budget vs. Target SLA</span>
+          <span class="mono" id="latTotalText">131.6 ms / 500 ms SLA</span>
+        </div>
+        <div class="lat-bar">
+          <div class="lat-seg-prompt" id="barPrompt" style="width: 100%;" title="Prompt Scan Latency"></div>
+          <div class="lat-seg-llm" id="barLlm" style="width: 0%; display:none;" title="Target LLM Time"></div>
+          <div class="lat-seg-resp" id="barResp" style="width: 0%; display:none;" title="Output Scan Latency"></div>
+        </div>
+        <div class="lat-legend">
+          <div class="lat-item">
+            <span class="lat-dot" style="background: var(--series-1);"></span>
+            <span>Prompt Scan: <b class="mono" id="latPromptMs">131.6 ms</b></span>
+          </div>
+          <div class="lat-item" id="legLlm" style="display:none;">
+            <span class="lat-dot" style="background: var(--series-3);"></span>
+            <span>Target LLM: <b class="mono" id="latLlmMs">800.0 ms</b></span>
+          </div>
+          <div class="lat-item" id="legResp" style="display:none;">
+            <span class="lat-dot" style="background: var(--series-2);"></span>
+            <span>Output Scan: <b class="mono" id="latRespMs">131.6 ms</b></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Metric Grid -->
+      <div class="stat-grid">
+        <div class="mini-stat">
+          <div class="lbl">Total Request Load</div>
+          <div class="val" id="resTotalTokens">1,341</div>
+          <div class="unit">tokens / req</div>
+        </div>
+        <div class="mini-stat">
+          <div class="lbl">Scanning Latency</div>
+          <div class="val" id="resLatency">131.6</div>
+          <div class="unit">ms per request</div>
+        </div>
+        <div class="mini-stat">
+          <div class="lbl">Target Utilization Cap</div>
+          <div class="val" id="resRhoCap">74%</div>
+          <div class="unit">max load for SLA</div>
+        </div>
+        <div class="mini-stat">
+          <div class="lbl">Cluster Headroom</div>
+          <div class="val" id="resUtilization">68%</div>
+          <div class="unit">GPU load @ peak</div>
+        </div>
+      </div>
+
+      <!-- System Infrastructure Recommendations -->
+      <div class="spec-box">
+        <div class="spec-title">
+          <span>🖥️ Host Node Infrastructure Requirements</span>
+        </div>
+        <div class="spec-list">
+          <div class="spec-item">
+            <div class="k">GPU VRAM</div>
+            <div class="v" id="specVram">960 GB</div>
+          </div>
+          <div class="spec-item">
+            <div class="k">Host CPU</div>
+            <div class="v" id="specCpu">48 Cores</div>
+          </div>
+          <div class="spec-item">
+            <div class="k">System RAM</div>
+            <div class="v" id="specRam">192 GB</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Export Report Button -->
+      <div style="margin-top: 20px;">
+        <button class="btn-primary" id="exportBtn" style="width: 100%;">
+          📄 Export Deployment Specification Report
+        </button>
+      </div>
+
+      <!-- Live Scan Processing Canvas -->
+      <div class="flow-card">
+        <div class="flow-cap">
+          <span>LIVE SCANNER SIMULATOR</span>
+          <span class="mono" id="flowRateText">50 req/sec</span>
+        </div>
+        <canvas id="flowCanvas" width="900" height="110"></canvas>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- GPU COMPARISON MATRIX SECTION -->
+  <section id="matrix">
+    <div class="stag">Hardware Benchmarks</div>
+    <h2 class="h2">GPU Resource Comparison Matrix</h2>
+    <p class="lede">
+      Compare hardware requirements, processing latencies, SLA compliance, and total cluster capacities across all supported NVIDIA GPU models for your specified workload.
+    </p>
+
+    <div class="gpu-table-wrap">
+      <table class="gpu-table">
+        <thead>
+          <tr>
+            <th>GPU Model</th>
+            <th>Speed (TPS)</th>
+            <th>Scan Latency</th>
+            <th>SLA Load Cap</th>
+            <th>Effective Capacity</th>
+            <th>Req. GPUs</th>
+            <th>Target SLA Status</th>
+            <th>Total VRAM</th>
+          </tr>
+        </thead>
+        <tbody id="gpuTableBody">
+          <!-- Populated dynamically by JS -->
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- SCALING & LATENCY CHARTS SECTION -->
+  <section id="charts">
+    <div class="stag">Interactive Performance Analytics</div>
+    <h2 class="h2">Performance Dynamics</h2>
+    <p class="lede">
+      Interactive benchmark visualizers demonstrating how prompt token length and parallel scanner execution impact throughput and latency. <b>Click or hover on any data point to inspect exact values</b>.
+    </p>
+
+    <div class="charts-grid">
+      <!-- Chart 1: Throughput vs Prompt Length -->
+      <div class="chart-card">
+        <h3>1. Throughput vs. Message Length</h3>
+        <p>Shows maximum screening throughput as prompt length grows. Click any dot to inspect values.</p>
+        <div id="chartLen"></div>
+        <div class="chart-val-box" id="readoutLen">
+          <span>Interactive Selection:</span>
+          <b>Click any data point on the curve above</b>
+        </div>
+      </div>
+
+      <!-- Chart 2: Scanner Count Cost -->
+      <div class="chart-card">
+        <h3>2. Parallel Scanner Scaling Efficiency</h3>
+        <p>Compares F5 parallel scanner engine (Blue) vs naive sequential evaluation (Gray). Click any bar to inspect.</p>
+        <div id="chartScanner"></div>
+        <div class="chart-val-box" id="readoutScanner">
+          <span>Interactive Selection:</span>
+          <b>Click any bar group above</b>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap" style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+    <div>F5 AI Guardrails Capacity Calculator · Powered by F5 AI Security Benchmark Model</div>
+    <div class="mono">© 2026 F5, Inc. All Rights Reserved</div>
+  </div>
+</footer>
+
+<div class="tip" id="tooltip"></div>
+
+<!-- EXPORT SPEC MODAL -->
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>F5 AI Guardrail Deployment Specification</h3>
+      <button class="modal-close" id="modalClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <pre id="modalContent">Generating report...</pre>
+    </div>
+    <div style="display: flex; justify-content: flex-end; gap: 10px;">
+      <button class="btn-primary" id="copyReportBtn">📋 Copy to Clipboard</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ---------- GPU BASELINE DATA ---------- */
+var GPU_SPEEDS = {
+  h100: { name: "NVIDIA H100 (80GB)", tps: 10193, vram: 80, costIdx: 1.0 },
+  a100: { name: "NVIDIA A100 (80GB)", tps: 6915,  vram: 80, costIdx: 0.65 },
+  l40:  { name: "NVIDIA L40 (48GB)",  tps: 3822,  vram: 48, costIdx: 0.45 },
+  a10:  { name: "NVIDIA A10 (24GB)",  tps: 2191,  vram: 24, costIdx: 0.28 },
+  l4:   { name: "NVIDIA L4 (24GB)",   tps: 1453,  vram: 24, costIdx: 0.18 }
+};
+
+/* WORKLOAD PRESETS */
+var PRESETS = {
+  chatbot: { mode: "out_of_band", sla: 500, llmLat: 800, rps: 50, prompt: 256, resp: 256, custom: 0, scanners: ["pi", "jb", "sp"] },
+  support: { mode: "inline", sla: 1000, llmLat: 1000, rps: 100, prompt: 512, resp: 512, custom: 0, scanners: ["pi", "jb", "sp", "pii"] },
+  rag:     { mode: "inline", sla: 2000, llmLat: 1500, rps: 15, prompt: 4096, resp: 1024, custom: 120, scanners: ["pi", "jb", "sec"] },
+  gateway: { mode: "out_of_band", sla: 100, llmLat: 0, rps: 500, prompt: 128, resp: 0, custom: 0, scanners: ["pi", "jb", "sp", "obf", "pii"] }
+};
+
+/* STATE */
+var state = {
+  mode: "out_of_band",
+  targetSlaMs: 500,
+  llmLatencyMs: 800,
+  rps: 50,
+  buffer: 25,
+  promptTokens: 256,
+  respTokens: 256,
+  customTokens: 0,
+  gpuProfile: "auto",
+  activeScanners: ["pi", "jb", "sp"]
+};
+
+/* DOM ELEMENTS */
+var rpsSlide = document.getElementById('rpsSlide'), rpsVal = document.getElementById('rpsVal');
+var slaSlide = document.getElementById('slaSlide'), slaVal = document.getElementById('slaVal');
+var llmLatSlide = document.getElementById('llmLatSlide'), llmLatVal = document.getElementById('llmLatVal'), llmLatGroup = document.getElementById('llmLatGroup');
+var bufSlide = document.getElementById('bufSlide'), bufVal = document.getElementById('bufVal');
+var promptSlide = document.getElementById('promptSlide'), promptVal = document.getElementById('promptVal'), promptHint = document.getElementById('promptHint');
+var respSlide = document.getElementById('respSlide'), respVal = document.getElementById('respVal'), responseGroup = document.getElementById('responseGroup');
+var customSlide = document.getElementById('customSlide'), customVal = document.getElementById('customVal');
+var dailyVolume = document.getElementById('dailyVolume');
+var scannerCountVal = document.getElementById('scannerCountVal');
+var modeHint = document.getElementById('modeHint');
+var tooltip = document.getElementById('tooltip');
+
+/* FORMATTERS */
+function commas(n) { return Math.round(n).toLocaleString('en-US'); }
+function fmt(n) { return n >= 100 ? Math.round(n) : (Math.round(n * 10) / 10); }
+
+/* CALCULATE TOTAL TOKENS PER REQUEST */
+function getScannerTokens() {
+  var total = 0;
+  var chips = document.querySelectorAll('.scanner-chip');
+  chips.forEach(function(chip){
+    if (chip.getAttribute('data-active') === 'true') {
+      total += parseInt(chip.getAttribute('data-cost') || '0', 10);
+    }
+  });
+  return total + state.customTokens;
+}
+
+function calculateRequestTokens() {
+  var scannerTok = getScannerTokens();
+  if (state.mode === 'out_of_band') {
+    return state.promptTokens + scannerTok;
+  } else {
+    // Inline mode: input scan + output scan
+    return (state.promptTokens + scannerTok) + (state.respTokens + scannerTok);
+  }
+}
+
+/* CALCULATE SIZING FOR ALL GPUS WITH M/G/1 QUEUEING SLA MODEL */
+function calculateSizing() {
+  var reqTokens = calculateRequestTokens();
+  var scannerTok = getScannerTokens();
+  var effectiveRPS = state.rps * (1 + state.buffer / 100);
+  var targetSlaSec = state.targetSlaMs / 1000;
+
+  var results = {};
+  var bestGpuKey = "h100";
+  var minCost = Infinity;
+
+  Object.keys(GPU_SPEEDS).forEach(function(key) {
+    var gpu = GPU_SPEEDS[key];
+    
+    // Single-request scan execution time on GPU (seconds)
+    var promptScanSec = (state.promptTokens + scannerTok) / gpu.tps;
+    var respScanSec = (state.mode === 'inline') ? ((state.respTokens + scannerTok) / gpu.tps) : 0;
+    var singleReqScanSec = promptScanSec + respScanSec;
+    
+    var singleReqScanMs = singleReqScanSec * 1000;
+    var totalEndToEndMs = (state.mode === 'inline') ? (singleReqScanMs + state.llmLatencyMs) : singleReqScanMs;
+
+    // Check if single request execution alone exceeds the SLA target
+    var singleReqExceedsSla = (totalEndToEndMs > state.targetSlaMs);
+
+    // Guardrail SLA budget available for scanning + queueing delay
+    var guardrailSlaSec = Math.max(0.001, targetSlaSec - (state.mode === 'inline' ? state.llmLatencyMs / 1000 : 0));
+
+    // M/G/1 Queueing Theory Utilization Cap (rho_max)
+    var rhoMax = 0.95;
+    if (singleReqScanSec < guardrailSlaSec) {
+      rhoMax = Math.max(0.08, Math.min(0.95, 1 - (singleReqScanSec / guardrailSlaSec)));
+    } else {
+      rhoMax = 0.08;
+    }
+
+    // Unconstrained physical capacity per GPU (RPS)
+    var mpsPerGpuUnconstrained = gpu.tps / reqTokens;
+
+    // SLA-constrained effective throughput per GPU (RPS)
+    var mpsPerGpuSlaConstrained = mpsPerGpuUnconstrained * rhoMax;
+
+    // Required GPUs to handle Effective RPS without exceeding Queueing SLA
+    var reqGpuCount = Math.max(1, Math.ceil(effectiveRPS / Math.max(0.01, mpsPerGpuSlaConstrained)));
+
+    var utilPct = Math.round((effectiveRPS / (reqGpuCount * mpsPerGpuUnconstrained)) * 100);
+
+    var estCostScore = reqGpuCount * gpu.costIdx * (singleReqExceedsSla ? 10 : 1);
+
+    results[key] = {
+      key: key,
+      name: gpu.name,
+      tps: gpu.tps,
+      promptScanMs: promptScanSec * 1000,
+      respScanMs: respScanSec * 1000,
+      singleReqScanMs: singleReqScanMs,
+      totalEndToEndMs: totalEndToEndMs,
+      singleReqExceedsSla: singleReqExceedsSla,
+      rhoMaxPct: Math.round(rhoMax * 100),
+      reqGpuCount: reqGpuCount,
+      mpsPerGpuSla: mpsPerGpuSlaConstrained,
+      mpsPerGpu: mpsPerGpuUnconstrained,
+      utilPct: Math.min(100, utilPct),
+      totalVram: reqGpuCount * gpu.vram,
+      estCostScore: estCostScore
+    };
+
+    if (!singleReqExceedsSla && estCostScore < minCost) {
+      minCost = estCostScore;
+      bestGpuKey = key;
+    }
+  });
+
+  if (minCost === Infinity) {
+    bestGpuKey = "h100";
+  }
+
+  var selectedKey = (state.gpuProfile === 'auto') ? bestGpuKey : state.gpuProfile;
+  return {
+    reqTokens: reqTokens,
+    effectiveRPS: effectiveRPS,
+    bestGpuKey: bestGpuKey,
+    selectedKey: selectedKey,
+    gpuResults: results
+  };
+}
+
+/* UPDATE UI RESULTS */
+function updateUI() {
+  var data = calculateSizing();
+  var currentRes = data.gpuResults[data.selectedKey];
+
+  // SLA Badge
+  var badge = document.getElementById('resSlaBadge');
+  if (!currentRes.singleReqExceedsSla) {
+    badge.setAttribute('data-status', 'pass');
+    badge.textContent = "✓ Meets SLA (" + fmt(currentRes.totalEndToEndMs) + "ms <= " + state.targetSlaMs + "ms)";
+  } else {
+    badge.setAttribute('data-status', 'fail');
+    badge.textContent = "⚠️ Exceeds SLA (" + fmt(currentRes.totalEndToEndMs) + "ms > " + state.targetSlaMs + "ms)";
+  }
+
+  // Hero Result Box
+  document.getElementById('resGpuCount').textContent = currentRes.reqGpuCount + " ×";
+  document.getElementById('resGpuModel').textContent = currentRes.name;
+  document.getElementById('resSummaryText').innerHTML = 
+    "Sufficient to process <b>" + commas(state.rps) + " RPS</b> with " + state.buffer + "% headroom buffer at <b>" + fmt(currentRes.totalEndToEndMs) + " ms</b> latency (Target SLA: " + state.targetSlaMs + " ms).";
+
+  // SLA Impact Callout
+  document.getElementById('slaImpactText').innerHTML = 
+    "⚡ <b>Queueing SLA Dynamics:</b> To guarantee latency stays under <b>" + state.targetSlaMs + " ms SLA</b> without queueing delays, GPU utilization is capped at <b>" + currentRes.rhoMaxPct + "% max load per instance</b>, requiring <b>" + currentRes.reqGpuCount + " × " + currentRes.name + "</b>.";
+
+  // Latency Decomposition
+  document.getElementById('latTotalText').textContent = fmt(currentRes.totalEndToEndMs) + " ms / " + state.targetSlaMs + " ms SLA";
+  document.getElementById('latPromptMs').textContent = fmt(currentRes.promptScanMs) + " ms";
+  
+  if (state.mode === 'inline') {
+    document.getElementById('barLlm').style.display = 'block';
+    document.getElementById('barResp').style.display = 'block';
+    document.getElementById('legLlm').style.display = 'flex';
+    document.getElementById('legResp').style.display = 'flex';
+    document.getElementById('latLlmMs').textContent = fmt(state.llmLatencyMs) + " ms";
+    document.getElementById('latRespMs').textContent = fmt(currentRes.respScanMs) + " ms";
+
+    var tot = Math.max(1, currentRes.totalEndToEndMs);
+    document.getElementById('barPrompt').style.width = ((currentRes.promptScanMs / tot) * 100) + "%";
+    document.getElementById('barLlm').style.width = ((state.llmLatencyMs / tot) * 100) + "%";
+    document.getElementById('barResp').style.width = ((currentRes.respScanMs / tot) * 100) + "%";
+  } else {
+    document.getElementById('barLlm').style.display = 'none';
+    document.getElementById('barResp').style.display = 'none';
+    document.getElementById('legLlm').style.display = 'none';
+    document.getElementById('legResp').style.display = 'none';
+    document.getElementById('barPrompt').style.width = "100%";
+  }
+
+  // Stat grid
+  document.getElementById('resTotalTokens').textContent = commas(data.reqTokens);
+  document.getElementById('resLatency').textContent = fmt(currentRes.totalEndToEndMs);
+  document.getElementById('resRhoCap').textContent = currentRes.rhoMaxPct + "%";
+  document.getElementById('resUtilization').textContent = currentRes.utilPct + "%";
+
+  // Specs
+  document.getElementById('specVram').textContent = currentRes.totalVram + " GB";
+  document.getElementById('specCpu').textContent = Math.max(4, currentRes.reqGpuCount * 4) + " Cores";
+  document.getElementById('specRam').textContent = Math.max(16, currentRes.reqGpuCount * 16) + " GB";
+
+  // Daily Volume
+  var daily = state.rps * 86400;
+  dailyVolume.textContent = (daily >= 1e6 ? (Math.round(daily/1e5)/10) + " Million" : commas(daily));
+
+  // Render Table & Charts
+  renderGpuTable(data);
+  renderLengthChart();
+  renderScannerChart();
+
+  // Flow animation rate
+  flowRate = state.rps;
+  document.getElementById('flowRateText').textContent = commas(state.rps) + " req/sec";
+}
+
+/* RENDER GPU COMPARISON TABLE */
+function renderGpuTable(data) {
+  var tbody = document.getElementById('gpuTableBody');
+  var html = "";
+
+  Object.keys(GPU_SPEEDS).forEach(function(key) {
+    var item = data.gpuResults[key];
+    var isRec = (key === data.bestGpuKey);
+    var isSelected = (key === data.selectedKey);
+
+    html += '<tr data-rec="' + isSelected + '">';
+    html += '<td><b>' + item.name + '</b>' + (isRec ? '<span class="badge-rec">Optimal</span>' : '') + '</td>';
+    html += '<td class="mono">' + commas(item.tps) + '</td>';
+    html += '<td class="mono">' + fmt(item.totalEndToEndMs) + ' ms</td>';
+    html += '<td class="mono">' + item.rhoMaxPct + '% Max Load</td>';
+    html += '<td class="mono">' + fmt(item.mpsPerGpuSla) + ' req/s</td>';
+    html += '<td class="mono"><b>' + item.reqGpuCount + ' GPU' + (item.reqGpuCount > 1 ? 's' : '') + '</b></td>';
+    html += '<td><span class="status-pill" data-pass="' + (!item.singleReqExceedsSla) + '">' + (!item.singleReqExceedsSla ? '✓ PASS' : '⚠️ FAIL (SLA)') + '</span></td>';
+    html += '<td class="mono">' + item.totalVram + ' GB</td>';
+    html += '</tr>';
+  });
+
+  tbody.innerHTML = html;
+}
+
+/* SVG HELPER */
+var NS = "http://www.w3.org/2000/svg";
+function el(n, a) { var e = document.createElementNS(NS, n); for (var k in a) e.setAttribute(k, a[k]); return e; }
+
+/* TOOLTIP SHOW / HIDE */
+function showTooltip(evt, text) {
+  tooltip.textContent = text;
+  tooltip.style.opacity = '1';
+  tooltip.style.left = evt.clientX + 'px';
+  tooltip.style.top = evt.clientY + 'px';
+}
+function hideTooltip() { tooltip.style.opacity = '0'; }
+
+/* RENDER CHART 1: THROUGHPUT VS MESSAGE LENGTH */
+function renderLengthChart() {
+  var host = document.getElementById('chartLen'); host.innerHTML = "";
+  var readout = document.getElementById('readoutLen');
+  var W = 520, H = 280, m = { l: 65, r: 25, t: 25, b: 55 };
+  var svg = el('svg', { viewBox: '0 0 ' + W + ' ' + H, class: 'svgchart' });
+
+  var selectedKey = (state.gpuProfile === 'auto') ? 'h100' : state.gpuProfile;
+  var gpu = GPU_SPEEDS[selectedKey];
+  var scannerTok = getScannerTokens();
+
+  var lengths = [64, 128, 256, 512, 1024, 2048, 4096, 8192];
+  var points = lengths.map(function(len) {
+    var reqTok = (state.mode === 'out_of_band') ? (len + scannerTok) : (len + state.respTokens + 2 * scannerTok);
+    var rps = gpu.tps / reqTok;
+    var scanMs = (reqTok / gpu.tps) * 1000;
+    return { len: len, rps: rps, scanMs: scanMs, reqTok: reqTok };
+  });
+
+  var xs = points.map(function(d){ return Math.log2(d.len); });
+  var xmin = Math.min.apply(0, xs), xmax = Math.max.apply(0, xs);
+  var ymax = Math.max.apply(0, points.map(function(d){ return d.rps; })) * 1.15;
+
+  var px = function(lx) { return m.l + (lx - xmin) / (xmax - xmin) * (W - m.l - m.r); };
+  var py = function(v) { return H - m.b - (v / ymax) * (H - m.t - m.b); };
+
+  // Y-AXIS TITLE
+  var yTtl = el('text', { x: -(H / 2) + 15, y: 18, transform: 'rotate(-90)', class: 'axttl', 'text-anchor': 'middle' });
+  yTtl.textContent = "Throughput Capacity (Req / sec)"; svg.appendChild(yTtl);
+
+  // X-AXIS TITLE
+  var xTtl = el('text', { x: m.l + (W - m.l - m.r)/2, y: H - 8, class: 'axttl', 'text-anchor': 'middle' });
+  xTtl.textContent = "Prompt Length (Input Tokens)"; svg.appendChild(xTtl);
+
+  // Horizontal Grid Lines & Y Ticks
+  [0, 0.25 * ymax, 0.5 * ymax, 0.75 * ymax, ymax].forEach(function(v) {
+    var Y = py(v);
+    svg.appendChild(el('line', { x1: m.l, x2: W - m.r, y1: Y, y2: Y, stroke: 'var(--hair)', 'stroke-width': 1, 'stroke-dasharray': '3 3' }));
+    var t = el('text', { x: m.l - 8, y: Y + 4, 'text-anchor': 'end' }); t.textContent = fmt(v); svg.appendChild(t);
+  });
+
+  // X-Axis Labels (Tokens)
+  lengths.forEach(function(len) {
+    var X = px(Math.log2(len));
+    svg.appendChild(el('line', { x1: X, x2: X, y1: H - m.b, y2: H - m.b + 5, stroke: 'var(--hair-strong)', 'stroke-width': 1.5 }));
+    var t = el('text', { x: X, y: H - m.b + 20, 'text-anchor': 'middle' }); t.textContent = (len >= 1024 ? (len/1024) + 'k' : len); svg.appendChild(t);
+  });
+
+  // Smooth Curve Path
+  var dpath = "";
+  points.forEach(function(d, i) {
+    var X = px(Math.log2(d.len)), Y = py(d.rps);
+    dpath += (i ? "L" : "M") + X + " " + Y + " ";
+  });
+  svg.appendChild(el('path', { d: dpath, fill: 'none', stroke: 'var(--f5-coral)', 'stroke-width': 3 }));
+
+  // Dynamic Interactive Points
+  points.forEach(function(d, idx) {
+    var X = px(Math.log2(d.len)), Y = py(d.rps);
+    var isCurrentPrompt = (Math.abs(d.len - state.promptTokens) < 32);
+
+    var g = el('g', { class: 'chart-dot-group', 'data-selected': isCurrentPrompt ? 'true' : 'false' });
+    
+    // Pulse ring for active point
+    if (isCurrentPrompt) {
+      g.appendChild(el('circle', { cx: X, cy: Y, r: 10, fill: 'var(--f5-red-glow)', stroke: 'var(--f5-red)', 'stroke-width': 1.5 }));
+    }
+
+    // Outer core dot
+    var core = el('circle', { cx: X, cy: Y, r: isCurrentPrompt ? 6 : 4.5, fill: 'var(--surface)', stroke: 'var(--f5-coral)', 'stroke-width': 2, class: 'dot-core' });
+    g.appendChild(core);
+
+    // Hit target area for easy clicking
+    var hit = el('circle', { cx: X, cy: Y, r: 16, fill: 'transparent' });
+    g.appendChild(hit);
+
+    // Interactive Handler
+    function selectPoint(evt) {
+      document.querySelectorAll('#chartLen .chart-dot-group').forEach(function(el){ el.setAttribute('data-selected', 'false'); });
+      g.setAttribute('data-selected', 'true');
+
+      var msg = "Selected: Prompt " + commas(d.len) + " tokens ➔ Throughput: " + fmt(d.rps) + " Req/sec | Latency: " + fmt(d.scanMs) + " ms (" + gpu.name + ")";
+      readout.innerHTML = "<span>Selected Data Point:</span> <b>Prompt: " + commas(d.len) + " tokens ➔ " + fmt(d.rps) + " Req/sec (" + fmt(d.scanMs) + " ms)</b>";
+      
+      showTooltip(evt, "Prompt: " + commas(d.len) + " tokens | " + fmt(d.rps) + " req/s | " + fmt(d.scanMs) + " ms");
+    }
+
+    g.addEventListener('click', selectPoint);
+    g.addEventListener('mousemove', selectPoint);
+    g.addEventListener('mouseleave', hideTooltip);
+
+    svg.appendChild(g);
+  });
+
+  host.appendChild(svg);
+}
+
+/* RENDER CHART 2: PARALLEL SCANNER SCALING */
+function renderScannerChart() {
+  var host = document.getElementById('chartScanner'); host.innerHTML = "";
+  var readout = document.getElementById('readoutScanner');
+  var W = 520, H = 280, m = { l: 65, r: 25, t: 25, b: 55 };
+  var svg = el('svg', { viewBox: '0 0 ' + W + ' ' + H, class: 'svgchart' });
+
+  var selectedKey = (state.gpuProfile === 'auto') ? 'h100' : state.gpuProfile;
+  var gpu = GPU_SPEEDS[selectedKey];
+
+  var counts = [1, 2, 4, 8];
+  var avgCost = 250;
+  var points = counts.map(function(c) {
+    var reqTokParallel = state.promptTokens + (c * avgCost);
+    var reqTokSeq = (state.promptTokens + avgCost) * c;
+    var parallelRps = gpu.tps / reqTokParallel;
+    var seqRps = gpu.tps / reqTokSeq;
+    var speedup = parallelRps / Math.max(0.01, seqRps);
+    return { c: c, parallelRps: parallelRps, seqRps: seqRps, speedup: speedup };
+  });
+
+  var ymax = Math.max.apply(0, points.map(function(d){ return d.parallelRps; })) * 1.2;
+  var py = function(v) { return H - m.b - (v / ymax) * (H - m.t - m.b); };
+  var gap = (W - m.l - m.r) / counts.length;
+  var bw = 28;
+
+  // Y-AXIS TITLE
+  var yTtl = el('text', { x: -(H / 2) + 15, y: 18, transform: 'rotate(-90)', class: 'axttl', 'text-anchor': 'middle' });
+  yTtl.textContent = "Throughput Capacity (Req / sec)"; svg.appendChild(yTtl);
+
+  // X-AXIS TITLE
+  var xTtl = el('text', { x: m.l + (W - m.l - m.r)/2, y: H - 8, class: 'axttl', 'text-anchor': 'middle' });
+  xTtl.textContent = "Active Scanner Count"; svg.appendChild(xTtl);
+
+  // Horizontal Grid Lines & Y Ticks
+  [0, 0.25 * ymax, 0.5 * ymax, 0.75 * ymax, ymax].forEach(function(v) {
+    var Y = py(v);
+    svg.appendChild(el('line', { x1: m.l, x2: W - m.r, y1: Y, y2: Y, stroke: 'var(--hair)', 'stroke-width': 1, 'stroke-dasharray': '3 3' }));
+    var t = el('text', { x: m.l - 8, y: Y + 4, 'text-anchor': 'end' }); t.textContent = fmt(v); svg.appendChild(t);
+  });
+
+  // Chart Legend at top right
+  var legG = el('g', { transform: 'translate(' + (W - 220) + ', 10)' });
+  legG.appendChild(el('rect', { x: 0, y: 0, width: 12, height: 12, rx: 3, fill: 'var(--series-1)' }));
+  var lt1 = el('text', { x: 16, y: 10, style: 'font-size:11px; fill: var(--ink);' }); lt1.textContent = "F5 Parallel"; legG.appendChild(lt1);
+  legG.appendChild(el('rect', { x: 95, y: 0, width: 12, height: 12, rx: 3, fill: 'var(--hair-strong)' }));
+  var lt2 = el('text', { x: 111, y: 10, style: 'font-size:11px; fill: var(--muted);' }); lt2.textContent = "Sequential"; legG.appendChild(lt2);
+  svg.appendChild(legG);
+
+  // Bars Group
+  points.forEach(function(d, idx) {
+    var cx = m.l + gap * idx + gap / 2;
+    var g = el('g', { class: 'chart-bar-group' });
+
+    // F5 Parallel Bar
+    var y1 = py(d.parallelRps), h1 = Math.max(2, H - m.b - y1);
+    var bar1 = el('rect', { x: cx - bw - 2, y: y1, width: bw, height: h1, rx: 5, fill: 'var(--series-1)' });
+    g.appendChild(bar1);
+
+    // Naive Sequential Bar
+    var y2 = py(d.seqRps), h2 = Math.max(2, H - m.b - y2);
+    var bar2 = el('rect', { x: cx + 2, y: y2, width: bw, height: h2, rx: 5, fill: 'var(--hair-strong)' });
+    g.appendChild(bar2);
+
+    // Value label over parallel bar
+    var vlab = el('text', { x: cx - bw/2 - 2, y: y1 - 6, 'text-anchor': 'middle', class: 'dlab', style: 'font-size: 11px;' });
+    vlab.textContent = fmt(d.parallelRps); g.appendChild(vlab);
+
+    // X-Axis Category Label
+    var txt = el('text', { x: cx, y: H - m.b + 20, 'text-anchor': 'middle' });
+    txt.textContent = d.c + " Scanner" + (d.c > 1 ? "s" : ""); svg.appendChild(txt);
+
+    // Interactive Handlers
+    function selectBar(evt) {
+      readout.innerHTML = "<span>Selected Scanner Count:</span> <b>" + d.c + " Scanners ➔ Parallel: " + fmt(d.parallelRps) + " req/s | Sequential: " + fmt(d.seqRps) + " req/s (" + fmt(d.speedup) + "× Faster)</b>";
+      showTooltip(evt, d.c + " Scanners: " + fmt(d.parallelRps) + " req/s (Parallel) vs " + fmt(d.seqRps) + " req/s (Seq)");
+    }
+
+    g.addEventListener('click', selectBar);
+    g.addEventListener('mousemove', selectBar);
+    g.addEventListener('mouseleave', hideTooltip);
+
+    svg.appendChild(g);
+  });
+
+  host.appendChild(svg);
+}
+
+/* EVENT LISTENERS & INPUT CONTROLS */
+function bindControls() {
+  rpsSlide.addEventListener('input', function() {
+    state.rps = parseInt(this.value, 10);
+    rpsVal.textContent = commas(state.rps) + " Req / sec";
+    updateUI();
+  });
+
+  slaSlide.addEventListener('input', function() {
+    state.targetSlaMs = parseInt(this.value, 10);
+    slaVal.textContent = commas(state.targetSlaMs) + " ms";
+    
+    // sync preset buttons
+    document.querySelectorAll('.sla-btn').forEach(function(b){
+      b.setAttribute('data-active', (parseInt(b.getAttribute('data-sla'), 10) === state.targetSlaMs).toString());
+    });
+    updateUI();
+  });
+
+  document.querySelectorAll('.sla-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      state.targetSlaMs = parseInt(this.getAttribute('data-sla'), 10);
+      slaSlide.value = state.targetSlaMs;
+      slaVal.textContent = commas(state.targetSlaMs) + " ms";
+      
+      document.querySelectorAll('.sla-btn').forEach(function(b){ b.setAttribute('data-active', 'false'); });
+      this.setAttribute('data-active', 'true');
+      updateUI();
+    });
+  });
+
+  llmLatSlide.addEventListener('input', function() {
+    state.llmLatencyMs = parseInt(this.value, 10);
+    llmLatVal.textContent = commas(state.llmLatencyMs) + " ms";
+    updateUI();
+  });
+
+  bufSlide.addEventListener('input', function() {
+    state.buffer = parseInt(this.value, 10);
+    bufVal.textContent = state.buffer + "%";
+    updateUI();
+  });
+
+  promptSlide.addEventListener('input', function() {
+    state.promptTokens = parseInt(this.value, 10);
+    promptVal.textContent = commas(state.promptTokens) + " tokens";
+    promptHint.textContent = commas(state.promptTokens) + " tokens ≈ " + commas(state.promptTokens * 0.75) + " words.";
+    updateUI();
+  });
+
+  respSlide.addEventListener('input', function() {
+    state.respTokens = parseInt(this.value, 10);
+    respVal.textContent = commas(state.respTokens) + " tokens";
+    updateUI();
+  });
+
+  customSlide.addEventListener('input', function() {
+    state.customTokens = parseInt(this.value, 10);
+    customVal.textContent = (state.customTokens > 0) ? commas(state.customTokens) + " Tokens" : "0 Tokens (Disabled)";
+    updateUI();
+  });
+
+  // Scanner Chips Toggle
+  var chips = document.querySelectorAll('.scanner-chip');
+  chips.forEach(function(chip) {
+    chip.addEventListener('click', function() {
+      var active = this.getAttribute('data-active') === 'true';
+      this.setAttribute('data-active', (!active).toString());
+      
+      var count = document.querySelectorAll('.scanner-chip[data-active="true"]').length;
+      scannerCountVal.textContent = count + " Scanner" + (count !== 1 ? "s" : "");
+      updateUI();
+    });
+  });
+
+  // Lifecycle Mode Toggle
+  var modeBtns = document.querySelectorAll('#modeSeg .seg-btn');
+  modeBtns.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      modeBtns.forEach(function(b){ b.setAttribute('aria-pressed', 'false'); });
+      this.setAttribute('aria-pressed', 'true');
+      state.mode = this.getAttribute('data-mode');
+      
+      responseGroup.style.display = (state.mode === 'inline') ? 'block' : 'none';
+      llmLatGroup.style.display = (state.mode === 'inline') ? 'block' : 'none';
+      
+      modeHint.innerHTML = (state.mode === 'inline') ? 
+        "<b>Inline Mode:</b> Scans both prompt input and model output response." :
+        "<b>Out-of-Band:</b> Scans prompt only before sending to LLM.";
+      updateUI();
+    });
+  });
+
+  // GPU Profile Toggle
+  var gpuBtns = document.querySelectorAll('#gpuSeg .seg-btn');
+  gpuBtns.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      gpuBtns.forEach(function(b){ b.setAttribute('aria-pressed', 'false'); });
+      this.setAttribute('aria-pressed', 'true');
+      state.gpuProfile = this.getAttribute('data-gpu');
+      document.getElementById('gpuProfVal').textContent = (state.gpuProfile === 'auto') ? 'Auto-Recommend' : GPU_SPEEDS[state.gpuProfile].name;
+      updateUI();
+    });
+  });
+
+  // Presets
+  var presetBtns = document.querySelectorAll('.preset-btn');
+  presetBtns.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      presetBtns.forEach(function(b){ b.setAttribute('data-active', 'false'); });
+      this.setAttribute('data-active', 'true');
+      var p = PRESETS[this.getAttribute('data-preset')];
+      
+      state.mode = p.mode;
+      state.targetSlaMs = p.sla;
+      state.llmLatencyMs = p.llmLat;
+      state.rps = p.rps;
+      state.promptTokens = p.prompt;
+      state.respTokens = p.resp;
+      state.customTokens = p.custom;
+
+      // Sync UI Controls
+      rpsSlide.value = state.rps; rpsVal.textContent = commas(state.rps) + " Req / sec";
+      slaSlide.value = state.targetSlaMs; slaVal.textContent = commas(state.targetSlaMs) + " ms";
+      llmLatSlide.value = state.llmLatencyMs; llmLatVal.textContent = commas(state.llmLatencyMs) + " ms";
+      promptSlide.value = state.promptTokens; promptVal.textContent = commas(state.promptTokens) + " tokens";
+      respSlide.value = state.respTokens; respVal.textContent = commas(state.respTokens) + " tokens";
+      customSlide.value = state.customTokens; customVal.textContent = (state.customTokens > 0) ? commas(state.customTokens) + " Tokens" : "0 Tokens (Disabled)";
+      
+      responseGroup.style.display = (state.mode === 'inline') ? 'block' : 'none';
+      llmLatGroup.style.display = (state.mode === 'inline') ? 'block' : 'none';
+
+      document.querySelectorAll('.sla-btn').forEach(function(b){
+        b.setAttribute('data-active', (parseInt(b.getAttribute('data-sla'), 10) === state.targetSlaMs).toString());
+      });
+      
+      var mBtns = document.querySelectorAll('#modeSeg .seg-btn');
+      mBtns.forEach(function(b){ b.setAttribute('aria-pressed', (b.getAttribute('data-mode') === state.mode).toString()); });
+
+      chips.forEach(function(chip){
+        var id = chip.getAttribute('data-id');
+        chip.setAttribute('data-active', (p.scanners.indexOf(id) !== -1).toString());
+      });
+
+      var count = p.scanners.length;
+      scannerCountVal.textContent = count + " Scanner" + (count !== 1 ? "s" : "");
+
+      updateUI();
+    });
+  });
+
+  // Theme Toggle
+  var themeBtn = document.getElementById('themeBtn');
+  themeBtn.addEventListener('click', function() {
+    var isDark = document.body.getAttribute('data-theme') === 'dark';
+    document.body.setAttribute('data-theme', isDark ? 'light' : 'dark');
+    updateUI();
+  });
+
+  // Export Spec Modal
+  var exportBtn = document.getElementById('exportBtn');
+  var modalBackdrop = document.getElementById('modalBackdrop');
+  var modalClose = document.getElementById('modalClose');
+  var copyReportBtn = document.getElementById('copyReportBtn');
+
+  exportBtn.addEventListener('click', function() {
+    var data = calculateSizing();
+    var currentRes = data.gpuResults[data.selectedKey];
+
+    var report = "# F5 AI Guardrail GPU Deployment Specification\n";
+    report += "Generated: " + new Date().toISOString().split('T')[0] + "\n\n";
+    report += "## Workload Profile\n";
+    report += "- Deployment Lifecycle: " + (state.mode === 'out_of_band' ? 'Out-of-Band (/scans)' : 'Inline (/prompts)') + "\n";
+    report += "- Target Maximum Latency SLA: " + state.targetSlaMs + " ms\n";
+    if (state.mode === 'inline') report += "- Target LLM Processing Time: " + state.llmLatencyMs + " ms\n";
+    report += "- Target Throughput: " + commas(state.rps) + " Req/sec (" + commas(state.rps * 86400) + " Req/day)\n";
+    report += "- Headroom Buffer: " + state.buffer + "%\n";
+    report += "- Average Input Prompt: " + commas(state.promptTokens) + " tokens\n";
+    if (state.mode === 'inline') report += "- Average Output Response: " + commas(state.respTokens) + " tokens\n";
+    report += "- Total Token Load per Request: " + commas(data.reqTokens) + " tokens\n\n";
+
+    report += "## Recommended Hardware Architecture\n";
+    report += "- Recommended GPUs: " + currentRes.reqGpuCount + " × " + currentRes.name + "\n";
+    report += "- Estimated Latency: " + fmt(currentRes.totalEndToEndMs) + " ms (" + (!currentRes.singleReqExceedsSla ? "✓ Meets SLA" : "⚠️ Exceeds SLA") + ")\n";
+    report += "- Target Utilization Cap: " + currentRes.rhoMaxPct + "% max load\n";
+    report += "- Peak GPU Cluster Load: " + currentRes.utilPct + "%\n";
+    report += "- Cluster GPU VRAM: " + currentRes.totalVram + " GB\n";
+    report += "- Host System CPU: " + Math.max(4, currentRes.reqGpuCount * 4) + " Cores\n";
+    report += "- Host System RAM: " + Math.max(16, currentRes.reqGpuCount * 16) + " GB\n";
+
+    document.getElementById('modalContent').textContent = report;
+    modalBackdrop.setAttribute('data-open', 'true');
+  });
+
+  modalClose.addEventListener('click', function() {
+    modalBackdrop.setAttribute('data-open', 'false');
+  });
+
+  copyReportBtn.addEventListener('click', function() {
+    var text = document.getElementById('modalContent').textContent;
+    navigator.clipboard.writeText(text).then(function() {
+      copyReportBtn.textContent = "✓ Copied!";
+      setTimeout(function(){ copyReportBtn.textContent = "📋 Copy to Clipboard"; }, 2000);
+    });
+  });
+}
+
+/* FLOW ANIMATION CANVAS */
+var flowRate = 50;
+var cv = document.getElementById('flowCanvas'), ctx = cv.getContext('2d');
+var parts = [], acc = 0, last = 0;
+
+function drawFlow(ts) {
+  var w = cv.width, h = cv.height;
+  ctx.clearRect(0, 0, w, h);
+
+  var dt = Math.min(50, ts - last); last = ts;
+  var spawn = Math.min(80, Math.max(2, flowRate)) / 900 * dt * 2.5; acc += spawn;
+
+  while(acc >= 1) {
+    acc -= 1;
+    parts.push({ x: -10, y: 20 + Math.random() * (h - 40), v: 0.1 + Math.random() * 0.05 });
+  }
+
+  // Draw scanner gate lines
+  ctx.strokeStyle = '#e0001b'; ctx.lineWidth = 2; ctx.globalAlpha = 0.6;
+  [w * 0.35, w * 0.65].forEach(function(gx) {
+    ctx.beginPath(); ctx.moveTo(gx, 10); ctx.lineTo(gx, h - 10); ctx.stroke();
+  });
+
+  // Draw particles
+  ctx.fillStyle = '#ff2a4b';
+  for(var i = parts.length - 1; i >= 0; i--) {
+    var p = parts[i]; p.x += p.v * dt * (w / 100);
+    if(p.x > w + 10) { parts.splice(i, 1); continue; }
+    ctx.globalAlpha = 0.85; ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, 7); ctx.fill();
+  }
+
+  ctx.globalAlpha = 1;
+  requestAnimationFrame(drawFlow);
+}
+
+/* INIT */
+window.addEventListener('load', function() {
+  bindControls();
+  updateUI();
+  last = performance.now();
+  requestAnimationFrame(drawFlow);
+});
+
+})();
+</script>
+</body>
+</html>
